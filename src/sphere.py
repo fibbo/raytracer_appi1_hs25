@@ -1,3 +1,6 @@
+from scene_base import SceneBase
+
+
 class Sphere(SceneBase):
     # TODO: Implement constructor
 

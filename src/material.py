@@ -1,3 +1,6 @@
+from scene_base import SceneBase
+
+
 class Material(SceneBase):
     # TODO: Implement constructor
 

@@ -1,3 +1,6 @@
+from scene_base import SceneBase
+
+
 class Light(SceneBase):
     # TODO: Implement constructor
 
