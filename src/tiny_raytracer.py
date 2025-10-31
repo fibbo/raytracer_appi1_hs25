@@ -11,36 +11,41 @@ float_max = sys.float_info.max
 
 
 def ray_sphere_intersect(origin, direction, sphere):
-    l = sphere.center - origin
-    tca = l.dot(direction)
-    d2 = l.dot(l) - tca * tca
-    if d2 > sphere.radius * sphere.radius:
+    origin_to_center = sphere.center - origin
+    projection_distance = origin_to_center.dot(direction)
+    perpendicular_dist_squared = (
+        origin_to_center.dot(origin_to_center)
+        - projection_distance * projection_distance
+    )
+    if perpendicular_dist_squared > sphere.radius * sphere.radius:
         return (False, 0)
-    thc = math.sqrt(sphere.radius * sphere.radius - d2)
-    t0 = tca - thc
-    t1 = tca + thc
-    if t0 < 1e-3:
-        t0 = t1
-    if t0 < 1e-3:
+    half_chord = math.sqrt(sphere.radius * sphere.radius - perpendicular_dist_squared)
+    near_intersection = projection_distance - half_chord
+    far_intersection = projection_distance + half_chord
+    if near_intersection < 1e-3:
+        near_intersection = far_intersection
+    if near_intersection < 1e-3:
         return (False, 0)
 
-    return (True, t0)
+    return (True, near_intersection)
 
 
 def reflect(incoming, normal):
     return incoming - normal * 2.0 * (incoming.dot(normal))
 
 
-def refract(incoming, normal, eta_t, eta_i=1.0):
-    cosi = -max(-1.0, min(1.0, incoming.dot(normal)))
-    if cosi < 0:
-        return refract(incoming, -normal, eta_i, eta_t)
-    eta = eta_i / eta_t
-    k = 1 - eta * eta * (1 - cosi * cosi)
-    if k < 0:
+def refract(incoming, normal, eta_transmitted, eta_incident=1.0):
+    cos_incident = -max(-1.0, min(1.0, incoming.dot(normal)))
+    if cos_incident < 0:
+        return refract(incoming, -normal, eta_incident, eta_transmitted)
+    eta_ratio = eta_incident / eta_transmitted
+    discriminant = 1 - eta_ratio * eta_ratio * (1 - cos_incident * cos_incident)
+    if discriminant < 0:
         return Vector(1, 0, 0)
     else:
-        return incoming * eta + normal * (eta * cosi - math.sqrt(k))
+        return incoming * eta_ratio + normal * (
+            eta_ratio * cos_incident - math.sqrt(discriminant)
+        )
 
 
 def scene_intersect(origin, direction, spheres):
@@ -49,26 +54,26 @@ def scene_intersect(origin, direction, spheres):
     normal = None
     material = None
     for sphere in spheres:
-        res = ray_sphere_intersect(origin, direction, sphere)
-        if res[0] and res[1] < spheres_dist:
-            spheres_dist = res[1]
+        intersection_result = ray_sphere_intersect(origin, direction, sphere)
+        if intersection_result[0] and intersection_result[1] < spheres_dist:
+            spheres_dist = intersection_result[1]
             hit = origin + direction * spheres_dist
             normal = (hit - sphere.center).normalize()
             material = sphere.material
 
     checkerboard_dist = float_max
     if abs(direction.y) > 1e-3:
-        d = -(origin.y + 4) / direction.y
-        pt = origin + direction * d
+        floor_distance = -(origin.y + 4) / direction.y
+        intersection_point = origin + direction * floor_distance
         if (
-            d > 1e-3
-            and abs(pt.x) < 10
-            and pt.z < -10
-            and pt.z > -30
-            and d < spheres_dist
+            floor_distance > 1e-3
+            and abs(intersection_point.x) < 10
+            and intersection_point.z < -10
+            and intersection_point.z > -30
+            and floor_distance < spheres_dist
         ):
-            checkerboard_dist = d
-            hit = pt
+            checkerboard_dist = floor_distance
+            hit = intersection_point
             normal = Vector(0, 1, 0)
             diffuse_color = (
                 Vector(0.3, 0.3, 0.3)
@@ -83,28 +88,37 @@ def scene_intersect(origin, direction, spheres):
 def cast_ray(origin, direction, spheres, lights, depth=0):
     if depth > 4:
         return Vector(0.2, 0.7, 0.8)
-    has_hit, point, normal, material = scene_intersect(origin, direction, spheres)
+    has_hit, hit_point, normal, material = scene_intersect(origin, direction, spheres)
     if not has_hit:
         return Vector(0.2, 0.7, 0.8)
 
-    reflect_dir = reflect(direction, normal).normalize()
-    refract_dir = refract(direction, normal, material.refractive_index).normalize()
-    reflect_color = cast_ray(point, reflect_dir, spheres, lights, depth + 1)
-    refract_color = cast_ray(point, refract_dir, spheres, lights, depth + 1)
+    reflect_direction = reflect(direction, normal).normalize()
+    refract_direction = refract(
+        direction, normal, material.refractive_index
+    ).normalize()
+    reflect_color = cast_ray(hit_point, reflect_direction, spheres, lights, depth + 1)
+    refract_color = cast_ray(hit_point, refract_direction, spheres, lights, depth + 1)
 
     diffuse_light_intensity = 0
     specular_light_intensity = 0
     for light in lights:
-        light_dir = (light.position - point).normalize()
+        light_direction = (light.position - hit_point).normalize()
 
-        has_hit, shadow_pt, _, _ = scene_intersect(point, light_dir, spheres)
-        if has_hit and (shadow_pt - point).norm() < (light.position - point).norm():
+        has_shadow_hit, shadow_point, _, _ = scene_intersect(
+            hit_point, light_direction, spheres
+        )
+        if (
+            has_shadow_hit
+            and (shadow_point - hit_point).norm() < (light.position - hit_point).norm()
+        ):
             continue
 
-        diffuse_light_intensity += light.intensity * max(0.0, light_dir.dot(normal))
+        diffuse_light_intensity += light.intensity * max(
+            0.0, light_direction.dot(normal)
+        )
         specular_light_intensity += (
             math.pow(
-                max(0.0, -reflect(-light_dir, normal).dot(direction)),
+                max(0.0, -reflect(-light_direction, normal).dot(direction)),
                 material.specular_exponent,
             )
             * light.intensity
@@ -120,16 +134,16 @@ def cast_ray(origin, direction, spheres, lights, depth=0):
 def render(scene):
     width = 400
     height = 200
-    fov = math.pi / 3.0
+    field_of_view = math.pi / 3.0
     framebuffer = width * height * [None]
-    for j in range(height):
-        for i in range(width):
-            dir_x = (i + 0.5) - width / 2.0
-            dir_y = -(j + 0.5) + height / 2.0
-            dir_z = -height / (2.0 * math.tan(fov / 2.0))
-            framebuffer[i + j * width] = cast_ray(
+    for pixel_y in range(height):
+        for pixel_x in range(width):
+            ray_dir_x = (pixel_x + 0.5) - width / 2.0
+            ray_dir_y = -(pixel_y + 0.5) + height / 2.0
+            ray_dir_z = -height / (2.0 * math.tan(field_of_view / 2.0))
+            framebuffer[pixel_x + pixel_y * width] = cast_ray(
                 Vector(0, 0, 0),
-                Vector(dir_x, dir_y, dir_z).normalize(),
+                Vector(ray_dir_x, ray_dir_y, ray_dir_z).normalize(),
                 scene["spheres"],
                 scene["lights"],
             )
@@ -137,13 +151,19 @@ def render(scene):
     with open("out.ppm", "wb") as f:
         f.write(bytearray(f"P6 {width} {height} 255\n", "ascii"))
         counter = 0
-        for vec in framebuffer:
+        for pixel_color in framebuffer:
             counter += 1
-            max_c = max(vec[0], max(vec[1], vec[2]))
-            if max_c > 1:
-                vec = vec * 1 / max_c
-            vec = bytes([int(255 * vec[0]), int(255 * vec[1]), int(255 * vec[2])])
-            f.write(vec)
+            max_component = max(pixel_color[0], max(pixel_color[1], pixel_color[2]))
+            if max_component > 1:
+                pixel_color = pixel_color * 1 / max_component
+            pixel_bytes = bytes(
+                [
+                    int(255 * pixel_color[0]),
+                    int(255 * pixel_color[1]),
+                    int(255 * pixel_color[2]),
+                ]
+            )
+            f.write(pixel_bytes)
 
 
 def read_scene(url):
