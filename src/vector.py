@@ -2,16 +2,18 @@ import math
 
 
 class Vector:
-    # TODO: Implement constructor
-    def __init__(self, *components):
+    def __init__(self, *args):
         self.components = []
-        for n in components:
+        for n in args:
             self.components.append(n)
         self.size = len(self.components)
 
-    # TODO: Implement __str__
+    def __str__(self):
+        return str(self.components)
 
-    # TODO: Implement properties
+    def __repr__(self):
+        return self.__str__()
+
     @property
     def x(self):
         return self.components[0]
@@ -24,28 +26,64 @@ class Vector:
     def z(self):
         return self.components[2]
 
-    # TODO: Implement dot product
+    def dot(self, rhs):
+        scalar_product = 0
+        assert self.size == rhs.size
+        for i in range(self.size):
+            scalar_product += self.components[i] * rhs.components[i]
+        return scalar_product
 
-    # TODO: Implement norm
+    def norm(self):
+        return math.sqrt(self[0] * self[0] + self[1] * self[1] + self[2] * self[2])
 
-    # TODO: Implement normalize
+    def normalize(self, length=1):
+        assert self.size == 3
+        return self / (length * self.norm())
 
-    # TODO: Implement cross product
+    def cross(self, rhs):
+        return Vector(
+            self.y * rhs.z - self.z * rhs.y,
+            self.z * rhs.x - self.x * rhs.z,
+            self.x * rhs.y - self.y * rhs.x,
+        )
 
     def __add__(self, rhs):
         new_vec = []
         for i in range(self.size):
             new_vec.append(self.components[i] + rhs.components[i])
+
+        # *new_vec unpacks the list. So instead of Vector([1,2,3])
+        # it calls Vector(1, 2, 3)
         return Vector(*new_vec)
 
-    # TODO: Implement __sub__ (subtraction)
+    def __sub__(self, rhs):
+        new_vec = []
+        for i in range(self.size):
+            new_vec.append(self.components[i] - rhs.components[i])
 
-    # TODO: Implement division (which special function name is the correct one?)
+        # *new_vec unpacks the list. So instead of Vector([1,2,3])
+        # it calls Vector(1, 2, 3)
+        return Vector(*new_vec)
 
-    # TODO: Try vector * scalar and scalar * vector
-    # TODO: Implement __mul__ (multiplication)
+    def __truediv__(self, rhs):
+        new_vec = []
+        for i in range(self.size):
+            new_vec.append(self.components[i] / rhs)
 
-    # TODO: Implement __neg__ (additive inverse)
+        return Vector(*new_vec)
+
+    def __mul__(self, rhs):
+        new_vec = []
+        for i in range(self.size):
+            new_vec.append(self.components[i] * rhs)
+
+        return Vector(*new_vec)
+
+    def __rmul__(self, rhs):
+        return self * rhs
+
+    def __neg__(self):
+        return self * -1
 
     def __eq__(self, rhs):
         if self.size != rhs.size:
@@ -55,11 +93,14 @@ class Vector:
                 return False
         return True
 
-    # TODO: Implement __getitem__
+    def __getitem__(self, index):
+        return self.components[index]
+
+    def to_json(self):
+        return json.dumps(self.components)
 
 
 if __name__ == "__main__":
     v = Vector(1, 2, 3)
-    print("v vector", v)
+    print(v)
     print(f"The x value is {v.x}")
-    print(f"The y value is {v.y()}")
