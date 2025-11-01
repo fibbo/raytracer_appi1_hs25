@@ -1,14 +1,47 @@
+import json
+
+from light import Light
 from scene_base import SceneBase
+from sphere import Sphere
 
 
 class Scene(SceneBase):
-    # TODO: Implement constructor
+    """
+    Scene class. Contains the information of the scene such as Lights and Spheres
+    """
 
-    # TODO: Implement __getitem__
+    def __init__(self, lights=[], spheres=[]):
+        self.lights = lights
+        self.spheres = spheres
 
-    # TODO: Implement __str__
+    def __getitem__(self, name):
+        if name == "lights":
+            return self.lights
+        if name == "spheres":
+            return self.spheres
 
-    # TODO: Implement to_json
+    def __str__(self):
+        output = ""
+        for light in self.lights:
+            output += light.__str__() + "\n"
+        for sphere in self.spheres:
+            output += sphere.__str__() + "\n"
+        return output
 
-    # TODO: Implement from_json
-    pass
+    def to_json(self):
+        scene_dict = {"lights": [], "spheres": []}
+        for light in self.lights:
+            scene_dict["lights"].append(light.to_json())
+        for sphere in self.spheres:
+            scene_dict["spheres"].append(sphere.to_json())
+
+        return json.dumps(scene_dict)
+
+    def from_json(self, json_string):
+        scene_dict = json.loads(json_string)
+        if "lights" in scene_dict:
+            for light in scene_dict["lights"]:
+                self.lights.append(Light(light))
+        if "spheres" in scene_dict:
+            for sphere in scene_dict["spheres"]:
+                self.spheres.append(Sphere(sphere))
